@@ -1,0 +1,28 @@
+FAROL DE VISTORIA - APP OFFLINE PARA ANDROID
+============================================
+
+Esta pasta é o aplicativo completo. Ele funciona sem internet depois de instalado.
+
+1) PUBLICAR (uma vez, grátis) - GitHub Pages
+   a. Crie uma conta em github.com e um repositório público, ex.: farol-vistoria
+   b. Envie TODOS os arquivos desta pasta (Add file > Upload files)
+   c. Settings > Pages > Branch: main / (root) > Save
+   d. Em ~1 minuto o app fica em: https://SEU-USUARIO.github.io/farol-vistoria/
+   (Netlify Drop ou Cloudflare Pages também servem: é só arrastar a pasta.)
+
+2) INSTALAR NO CELULAR ANDROID
+   a. Abra o endereço acima no Chrome
+   b. Menu (3 pontos) > "Instalar app" ou "Adicionar à tela inicial"
+   c. Abra uma vez com internet. Depois funciona offline no canteiro.
+
+3) (OPCIONAL) GERAR UM APK
+   Com o endereço publicado, acesse pwabuilder.com, cole o link e baixe o pacote Android.
+
+USO
+   - No PC: monte a obra na planilha Farol_Vistoria (PARAMETROS, EXCECOES, ATIVIDADES)
+   - No app: Arquivo > Carregar planilha da obra
+   - Lance os status tocando nas células
+   - Arquivo > Exportar planilha atualizada > abra no Excel
+
+Os lançamentos ficam guardados no celular até a exportação.
+Faça "Salvar backup" ao fim de cada dia por segurança.
