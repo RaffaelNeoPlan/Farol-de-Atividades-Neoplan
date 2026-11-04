@@ -98,6 +98,7 @@ table.farol{border-collapse:separate;border-spacing:0;font-variant-numeric:tabul
 .s2{background:var(--grn);color:var(--grn-fg)}
 .sn{background:var(--na);color:var(--na-fg);cursor:default!important;background-image:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.07) 6px 8px)}
 .sx{background:transparent}
+.farol td.c.last{box-shadow:inset 0 0 0 3px var(--fg)}
 .farol td.c.flash{animation:fl .35s ease-out}
 @keyframes fl{0%{box-shadow:inset 0 0 0 3px var(--focus)}100%{box-shadow:inset 0 0 0 0 var(--focus)}}
 @media (prefers-reduced-motion:reduce){.farol td.c.flash{animation:none}}
@@ -211,7 +212,7 @@ const DEMO_OID="__exemplo";
 const C0=5, MAXP=40;
 
 /* ---------- estado ---------- */
-let S={oid:null,cfg:null,entries:{},dirty:[],user:"",lastExport:null,demo:true,baseName:"",torre:null,cat:"Apartamento",view:"farol",sel:1};
+let S={pos:{},oid:null,cfg:null,entries:{},dirty:[],user:"",lastExport:null,demo:true,baseName:"",torre:null,cat:"Apartamento",view:"farol",sel:1};
 let IDX={current:null,user:"",sel:1,obras:[]};   // lista de obras guardadas no aparelho
 let BASE=null;            // ArrayBuffer da planilha base
 let UNDO=[];
@@ -239,8 +240,8 @@ function loadIndex(){try{const o=JSON.parse(localStorage.getItem(IDX_KEY)||"null
 function persist(){
   if(!S.oid||!S.cfg)return;
   try{
-    const {oid,cfg,entries,dirty,lastExport,demo,baseName,torre,cat,view}=S;
-    localStorage.setItem(OBRA_KEY(oid),JSON.stringify({oid,cfg,entries,dirty,lastExport,demo,baseName,torre,cat,view}));
+    const {oid,cfg,entries,dirty,lastExport,demo,baseName,torre,cat,view,pos}=S;
+    localStorage.setItem(OBRA_KEY(oid),JSON.stringify({oid,cfg,entries,dirty,lastExport,demo,baseName,torre,cat,view,pos}));
     const sum=obraSummary();const i=IDX.obras.findIndex(o=>o.oid===oid);
     if(i>=0)IDX.obras[i]=sum;else IDX.obras.push(sum);
     IDX.current=oid;IDX.user=S.user;IDX.sel=S.sel;
@@ -253,7 +254,7 @@ async function switchObra(oid){
   const o=readObra(oid);
   if(!o){IDX.obras=IDX.obras.filter(x=>x.oid!==oid);saveIndex();if(oid===DEMO_OID){await loadDemo();return true}return false}
   Object.assign(S,{oid:o.oid,cfg:o.cfg,entries:o.entries||{},dirty:o.dirty||[],lastExport:o.lastExport||null,demo:!!o.demo,baseName:o.baseName||"",
-    torre:o.torre||o.cfg.torres[0].id,cat:o.cat||"Apartamento",view:o.view||"farol"});
+    torre:o.torre||o.cfg.torres[0].id,cat:o.cat||"Apartamento",view:o.view||"farol",pos:o.pos||{}});
   BASE=S.demo?b64ToBuf(DEMO_B64):(await idbGet("base:"+oid));
   UNDO=[];pendingCol=null;render();return true;
 }
@@ -419,7 +420,7 @@ function renderFarol(t){
   const acts=actsOf(t,cat.key);const pavs=pavsOf(t);
   const st=$("#stage");
   let box=$("#gridbox");
-  const keep=box?{x:box.scrollLeft,y:box.scrollTop,id:box.dataset.id}:null;
+  if(box&&box.dataset.id){const o=S.pos[box.dataset.id]||(S.pos[box.dataset.id]={});o.x=box.scrollLeft;o.y=box.scrollTop}
   if(!acts.length){st.innerHTML=`<div class="wrap empty">Nenhuma atividade de ${esc(cat.key)} nesta torre.</div>`;return}
   let h=`<table class="farol"><thead><tr class="h1"><th class="name" scope="col">${esc(cat.key.toUpperCase())}</th>`;
   for(const p of pavs)h+=`<th class="pv" scope="col" data-pav="${p}" title="Aplicar a todo o ${p}º pavimento">${p}º</th>`;
@@ -440,8 +441,15 @@ function renderFarol(t){
   const id=t.id+"|"+cat.key;
   st.innerHTML=`<div class="gridbox" id="gridbox" data-id="${esc(id)}">${h}</div>`;
   box=$("#gridbox");
-  if(keep&&keep.id===id){box.scrollLeft=keep.x;box.scrollTop=keep.y}
+  const pos=S.pos[id];
+  if(pos){
+    if(pos.cell){const [pv,aid]=pos.cell.split("|");const el=box.querySelector(`td[data-pav="${pv}"][data-a="${CSS.escape(aid)}"]`);if(el)el.classList.add("last")}
+    if(pos.x!=null){box.scrollLeft=pos.x;box.scrollTop=pos.y}
+    else{const el=box.querySelector("td.last");if(el)el.scrollIntoView({block:"center",inline:"center"})}
+  }
+  box.addEventListener("scroll",()=>{const o=S.pos[id]||(S.pos[id]={});o.x=box.scrollLeft;o.y=box.scrollTop;clearTimeout(scrollSaveT);scrollSaveT=setTimeout(persist,600)},{passive:true});
 }
+let scrollSaveT=null;
 function renderResumo(){
   const torres=S.cfg.torres;
   let h=`<div class="resumo wrap"><div class="sum-head"><div><h2>Avanço por torre</h2><p>Toque numa torre para abrir o farol.</p></div></div><div class="rgrid">`;
@@ -488,12 +496,14 @@ function undo(){
 }
 function tapCell(td){
   const t=curTorre();const pav=+td.dataset.pav,aid=td.dataset.a;
+  const id=t.id+"|"+S.cat;const o=S.pos[id]||(S.pos[id]={});o.cell=pav+"|"+aid;
   const b=[];setVal(t,pav,aid,S.sel,b);commit(b);
   const el=document.querySelector(`#gridbox td[data-pav="${pav}"][data-a="${CSS.escape(aid)}"]`);
   if(el){el.classList.add("flash");}
 }
 function applyCol(pav){
   const t=curTorre();const b=[];
+  const fa=actsOf(t,S.cat).find(a=>units(t,pav,a.tipo)>0);if(fa){const o=S.pos[t.id+"|"+S.cat]||(S.pos[t.id+"|"+S.cat]={});o.cell=pav+"|"+fa.id}
   for(const a of actsOf(t,S.cat))if(units(t,pav,a.tipo)>0)setVal(t,pav,a.id,S.sel,b);
   pendingCol=null;commit(b);toast(`${pav}º pavimento atualizado`);
 }
@@ -608,7 +618,7 @@ async function loadXlsx(file){
       const entries=parsed.entries;let dirty=[];
       if(keep){for(const k of S.dirty){if(S.entries[k]){entries[k]=S.entries[k];dirty.push(k)}}}
       const prevTorre=S.oid===oid?S.torre:null;
-      Object.assign(S,{oid,cfg:parsed.cfg,entries,dirty,demo:false,baseName:file.name,view:"farol",
+      Object.assign(S,{oid,cfg:parsed.cfg,entries,dirty,demo:false,baseName:file.name,view:"farol",pos:S.oid===oid?S.pos:{},
         lastExport:S.oid===oid?S.lastExport:null,cat:S.oid===oid?S.cat:"Apartamento"});
       S.torre=parsed.cfg.torres.some(t=>t.id===prevTorre)?prevTorre:parsed.cfg.torres[0].id;
       BASE=buf.slice(0);
@@ -732,7 +742,7 @@ $("#fileJson").addEventListener("change",e=>{const f=e.target.files[0];e.target.
 function b64ToBuf(b){const s=atob(b);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u.buffer}
 async function loadDemo(){
   const buf=b64ToBuf(DEMO_B64);const p=await parseWorkbook(buf);
-  Object.assign(S,{oid:DEMO_OID,cfg:p.cfg,entries:p.entries,dirty:[],demo:true,baseName:"Exemplo Uniq",lastExport:null,torre:p.cfg.torres[0].id,view:"farol",cat:"Apartamento"});
+  Object.assign(S,{pos:{},oid:DEMO_OID,cfg:p.cfg,entries:p.entries,dirty:[],demo:true,baseName:"Exemplo Uniq",lastExport:null,torre:p.cfg.torres[0].id,view:"farol",cat:"Apartamento"});
   BASE=buf;UNDO=[];pendingCol=null;render();
 }
 (async function start(){
